@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#284d40"><meta name="description" content="Dein persönlicher Adventskalender.">
+  <title>Wiolettas Adventskalender</title>
+  <link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/icon-192.png"><link rel="stylesheet" href="./style.css">
+  <script src="./app.js" defer></script>
+</head>
+<body class="calendar-app">
+  <main class="calendar-shell">
+    <h1 id="heading">Wiolettas <em>Adventskalender</em></h1>
+    <div id="doors" class="doors" aria-label="24 Adventstürchen"></div>
+    <noscript><p>Bitte aktiviere JavaScript, um die Türchen zu öffnen.</p></noscript>
+    <p id="load-error" class="error" role="alert" hidden>Der Kalender konnte nicht geladen werden. Bitte lade die Seite erneut, sobald du Internet hast.</p>
+  </main>
+  <dialog id="door-dialog" class="door-dialog" aria-labelledby="door-title"><button class="close-button" id="close-dialog" aria-label="Türchen schließen">×</button><div id="door-content"></div></dialog>
+</body>
+</html>
