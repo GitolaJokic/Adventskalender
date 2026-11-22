@@ -4,7 +4,7 @@
   "short_name": "Wiolettas Advent",
   "description": "Dein persönlicher Adventskalender mit 24 kleinen Momenten.",
   "lang": "de",
-  "start_url": "./",
+  "start_url": "./?kalender=wioletta",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f7f3e9",

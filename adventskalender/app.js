@@ -1,10 +1,15 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const preview = new URLSearchParams(location.search).get('vorschau') === '1';
+  const params = new URLSearchParams(location.search);
+  const preview = params.get('vorschau') === '1';
+  // Profiles separate local progress, not access to the publicly hosted letters.
+  // The installed app starts at ./ and therefore uses the same Wioletta profile.
+  const requestedCalendar = params.get('kalender');
+  const calendarId = requestedCalendar && /^[a-z0-9-]{1,64}$/.test(requestedCalendar) ? requestedCalendar : 'wioletta';
   const motifs = ['✧', '❋', '♡', '✳', '☆', '❄', '☾', '✧', '❋', '☆', '♡', '✳', '❄', '✧', '☾', '♡', '❋', '☆', '✳', '❄', '♡', '☾', '✧', '☆'];
   // Optional review date is honoured only in the explicit preview mode.
-  const dateParam = preview && new URLSearchParams(location.search).get('datum');
+  const dateParam = preview && params.get('datum');
   let previewTime = null;
   if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
     const [year, month, day] = dateParam.split('-').map(Number);
@@ -15,13 +20,20 @@
   const animals = ['teddy', 'cow', 'snowflake'];
   const companions = day => day === 24 ? animals : [animals[(day - 1) % animals.length]];
   let config, opened = [], redeemed = [], activeDay, animating = false;
-  const read = key => { if (preview) return []; try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
-  const persist = (key, value) => { if (preview) return; try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Reading remains possible when storage is unavailable. */ } };
-  const key = suffix => `dezemberpost:${config.year}:${preview ? 'preview:' : ''}${suffix}`;
+  const storageWarning = () => { $('storage-error').hidden = false; };
+  const read = key => { if (preview) return []; try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch { storageWarning(); return []; } };
+  const persist = (key, value) => { if (preview) return; try { localStorage.setItem(key, JSON.stringify(value)); } catch { storageWarning(); } };
+  // Start the live calendar fresh; earlier test runs used a different namespace.
+  const key = suffix => `dezemberpost:live-v1:${config.year}:${calendarId}:${suffix}`;
+  const cleanDays = days => [...new Set(days.filter(d => Number.isInteger(d) && d >= 1 && d <= 24))].sort((a, b) => a - b);
+  const updateProgress = (suffix, current, day) => {
+    const next = cleanDays([...read(key(suffix)), ...current, day]);
+    persist(key(suffix), next);
+    return next;
+  };
   const available = day => preview || calendarTime() >= new Date(config.year, 11, day).getTime();
-  // A previous calendar day is visually open even if this browser never visited it.
-  const past = day => (!preview || previewTime !== null) && calendarTime() >= new Date(config.year, 11, day + 1).getTime();
-  const isOpen = day => available(day) && (past(day) || opened.includes(day));
+  // A missed day stays visibly closed, but can be opened later without a deadline.
+  const isOpen = day => available(day) && opened.includes(day);
   function element(tag, text, className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
   function render() {
     if (animating) return;
@@ -98,10 +110,10 @@
     }
     if (day === 24) area.append(senders);
     if (!available(day)) {
-      area.append(element('h2', 'Na, nicht schummeln!'), element('p', `Noch ist es nicht so weit. Dieses Türchen bewachen wir bis zum ${day}. Dezember ${config.year}.`));
+      area.append(element('h2', 'Noch ein bisschen Geduld, Wioletta!'), element('p', `Bitte warte noch bis zum ${day}. Dezember ${config.year}. Dann öffnen wir dieses Türchen gemeinsam mit dir.`));
     } else {
       const data = config.days.find(item => item.day === day);
-      if (!opened.includes(day)) { opened.push(day); persist(key('opened'), opened); render(); }
+      if (!opened.includes(day)) { opened = updateProgress('opened', opened, day); render(); }
       if (!data || ![data.title, data.text, data.image, data.video, data.voucher?.title].some(Boolean)) {
         const box = element('div', undefined, 'empty-door');
         box.append(element('div', '✧', 'empty-symbol'), element('h2', 'Platz für etwas Schönes.'), element('p', 'Dieses Türchen wartet noch auf seine kleine Überraschung.')); area.append(box);
@@ -125,7 +137,7 @@
           const box = element('section', undefined, 'voucher'); box.append(element('span', 'EIN GUTSCHEIN FÜR DICH', 'eyebrow'), element('h3', data.voucher.title));
           if (data.voucher.description) box.append(element('p', data.voucher.description));
           const button = element('button', redeemed.includes(day) ? 'Schon eingelöst ♡' : 'Als eingelöst markieren'); button.disabled = redeemed.includes(day);
-          button.addEventListener('click', () => { if (!redeemed.includes(day)) redeemed.push(day); persist(key('redeemed'), redeemed); button.textContent = 'Schon eingelöst ♡'; button.disabled = true; }); box.append(button); area.append(box);
+          button.addEventListener('click', () => { redeemed = updateProgress('redeemed', redeemed, day); button.textContent = 'Schon eingelöst ♡'; button.disabled = true; }); box.append(button); area.append(box);
         }
       }
     }
@@ -147,10 +159,15 @@
   });
   fetch('./content.json', { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error('content'); return r.json(); }).then(data => {
     if (!Number.isInteger(data.year) || data.year < 2000 || data.year > 2200 || !Array.isArray(data.days)) throw new Error('config');
-    config = data; opened = read(key('opened')).filter((d, i, a) => Number.isInteger(d) && d >= 1 && d <= 24 && a.indexOf(d) === i); redeemed = read(key('redeemed'));
+    config = data; opened = cleanDays(read(key('opened'))); redeemed = cleanDays(read(key('redeemed')));
+    const refresh = () => {
+      if (!preview) { opened = cleanDays([...opened, ...read(key('opened'))]); redeemed = cleanDays([...redeemed, ...read(key('redeemed'))]); }
+      render();
+    };
     $('heading').replaceChildren(element('span', `${config.name || 'Wioletta'}s `), element('em', 'Adventskalender'));
-    render(); setInterval(render, 30000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+    render(); setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+    window.addEventListener('storage', event => { if ([key('opened'), key('redeemed')].includes(event.key)) refresh(); });
   }).catch(() => { $('load-error').hidden = false; });
   if ('serviceWorker' in navigator && ['https:', 'http:'].includes(location.protocol)) navigator.serviceWorker.register('./sw.js').catch(() => {});
 })();
