@@ -13,6 +13,7 @@
   }
   const calendarTime = () => previewTime === null ? Date.now() : previewTime;
   const animals = ['teddy', 'cow', 'snowflake'];
+  const companions = day => day === 24 ? animals : [animals[(day - 1) % animals.length]];
   let config, opened = [], redeemed = [], activeDay, animating = false;
   const read = key => { if (preview) return []; try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
   const persist = (key, value) => { if (preview) return; try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Reading remains possible when storage is unavailable. */ } };
@@ -29,7 +30,7 @@
     for (let day = 1; day <= 24; day++) {
       const unlocked = available(day), seen = isOpen(day);
       const today = now.getFullYear() === config.year && now.getMonth() === 11 && now.getDate() === day;
-      const button = element('button', undefined, `door${unlocked ? '' : ' locked'}${seen ? ' opened' : ''}${today ? ' today' : ''}`);
+      const button = element('button', undefined, `door${day === 24 ? ' finale-door' : ''}${unlocked ? '' : ' locked'}${seen ? ' opened' : ''}${today ? ' today' : ''}`);
       button.type = 'button';
       button.setAttribute('aria-label', `${day}. Dezember${seen ? ', bereits geöffnet' : unlocked ? ', Türchen öffnen' : ', noch geschlossen'}`);
       const motif = element('span', motifs[day - 1], 'motif'); motif.setAttribute('aria-hidden', 'true');
@@ -42,15 +43,17 @@
       back.append(element('span', '♡', 'back-heart'), element('span', String(day).padStart(2, '0'), 'back-number'));
       back.setAttribute('aria-hidden', 'true');
       leaf.append(front, back);
-      const animal = element('img', undefined, 'door-animal');
-      animal.src = `./assets/${animals[(day - 1) % animals.length]}.svg`;
-      animal.alt = ''; animal.setAttribute('aria-hidden', 'true');
-      const rig = element('span', undefined, 'animal-rig'); rig.setAttribute('aria-hidden', 'true');
-      const species = animals[(day - 1) % animals.length];
-      rig.setAttribute('data-animal', species);
-      rig.append(animal, element('span', undefined, 'animal-arm arm-left'), element('span', undefined, 'animal-arm arm-right'));
-const hinges = element('span', undefined, 'door-hinges'); hinges.setAttribute('aria-hidden', 'true');
-      button.append(leaf, hinges, rig);
+      const hinges = element('span', undefined, 'door-hinges'); hinges.setAttribute('aria-hidden', 'true');
+      button.append(leaf, hinges);
+      for (const species of companions(day)) {
+        const animal = element('img', undefined, 'door-animal');
+        animal.src = `./assets/${species}.svg`;
+        animal.alt = ''; animal.setAttribute('aria-hidden', 'true');
+        const rig = element('span', undefined, 'animal-rig'); rig.setAttribute('aria-hidden', 'true');
+        rig.setAttribute('data-animal', species);
+        rig.append(animal, element('span', undefined, 'animal-arm arm-left'), element('span', undefined, 'animal-arm arm-right'));
+        button.append(rig);
+      }
       if (seen) { const mark = element('span', '♡', 'opened-mark'); mark.setAttribute('aria-hidden', 'true'); button.append(mark); }
       button.addEventListener('click', () => animateDoor(day, button)); $('doors').append(button);
     }
@@ -62,8 +65,9 @@ const hinges = element('span', undefined, 'door-hinges'); hinges.setAttribute('a
     animating = true;
     const locked = !available(day);
     const animationClass = locked ? 'scolding' : 'opening';
-    const animal = button.querySelector('.door-animal');
-    if (locked) animal.src = `./assets/${animals[(day - 1) % animals.length]}-strict.svg`;
+    const helpers = button.querySelectorAll('.door-animal');
+    const setHelpers = suffix => helpers.forEach((animal, i) => { animal.src = `./assets/${companions(day)[i]}${suffix}.svg`; });
+    if (locked) setHelpers('-strict');
     button.classList.add(animationClass);
     button.setAttribute('aria-busy', 'true');
     // Finish once, even if an animation event and the safety timer arrive together.
@@ -73,21 +77,26 @@ const hinges = element('span', undefined, 'door-hinges'); hinges.setAttribute('a
       finished = true;
       animating = false;
       button.classList.remove(animationClass);
-      animal.src = `./assets/${animals[(day - 1) % animals.length]}.svg`;
+      setHelpers('');
       button.removeAttribute('aria-busy');
       openDoor(day);
     };
-    button.addEventListener('animationend', event => { if (event.animationName === (locked ? 'door-locked' : day % 2 === 0 ? 'animal-hop-and-turn' : 'animal-turn-door')) finish(); });
-    setTimeout(finish, locked ? 800 : day % 2 === 0 ? 3250 : 2600);
+    button.addEventListener('animationend', event => { if (event.animationName === (locked ? 'door-locked' : day === 24 ? 'finale-helper' : day % 2 === 0 ? 'animal-hop-and-turn' : 'animal-turn-door')) finish(); });
+    setTimeout(finish, locked ? 800 : day === 24 ? 3550 : day % 2 === 0 ? 3250 : 2600);
   }
 
   function mediaPath(path) { try { const url = new URL(path, location.href); return ['http:', 'https:', 'file:'].includes(url.protocol) ? url.href : null; } catch { return null; } }
   function openDoor(day) {
     activeDay = day;
     const area = $('door-content'); area.replaceChildren();
-    const animal = element('img', undefined, 'dialog-animal');
-    animal.src = `./assets/${animals[(day - 1) % animals.length]}${available(day) ? '-alive' : '-strict'}.svg`; animal.alt = '';
-    area.append(element('span', `${String(day).padStart(2, '0')} / DEZEMBER`, 'eyebrow'), animal);
+    area.append(element('span', `${String(day).padStart(2, '0')} / DEZEMBER`, 'eyebrow'));
+    const senders = day === 24 ? element('div', undefined, 'dialog-companions') : area;
+    for (const species of companions(day)) {
+      const animal = element('img', undefined, 'dialog-animal');
+      animal.src = `./assets/${species}${available(day) ? '-alive' : '-strict'}.svg`; animal.alt = '';
+      senders.append(animal);
+    }
+    if (day === 24) area.append(senders);
     if (!available(day)) {
       area.append(element('h2', 'Na, nicht schummeln!'), element('p', `Noch ist es nicht so weit. Dieses Türchen bewachen wir bis zum ${day}. Dezember ${config.year}.`));
     } else {
@@ -99,6 +108,13 @@ const hinges = element('span', undefined, 'door-hinges'); hinges.setAttribute('a
       } else {
         area.append(element('h2', data.title || `Dein ${day}. Dezember`));
         if (data.text) area.append(element('p', data.text, 'letter-text'));
+        if (day === 24 && data.personalText) {
+          const personal = element('section', undefined, 'personal-letter');
+          const portrait = element('img', undefined, 'felix-avatar');
+          portrait.src = './assets/felix-alive.svg'; portrait.alt = 'Felix als kleine Animationsfigur';
+          personal.append(portrait, element('h3', 'Von Felix'), element('p', data.personalText, 'letter-text'));
+          area.append(personal);
+        }
         if (data.image && mediaPath(data.image)) {
           const img = element('img'); img.src = mediaPath(data.image); img.alt = data.imageAlt || 'Deine persönliche Überraschung'; img.addEventListener('error', () => img.replaceWith(element('p', 'Das Foto konnte nicht geladen werden. Bitte versuche es mit Internet erneut.'))); area.append(img);
         }
